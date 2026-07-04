@@ -11,6 +11,16 @@ An AI-powered A-share stock research assistant. Automatically filters, analyzes,
 - **Notifications** — WeChat (ServerChan) and Telegram push
 - **Multi-tier Architecture** — Rule pre-filter → AI analysis → buy/sell signals
 
+## Screenshots
+
+### Dashboard — Daily Recommendations
+
+![Dashboard](assets/dashboard.png)
+
+### Stock Detail — K-line & Multi-Agent Analysis
+
+![Stock Detail](assets/stock-detail.png)
+
 ## Prerequisites
 
 - Python 3.10+

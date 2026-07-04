@@ -11,6 +11,16 @@
 - **消息通知** — 支持 ServerChan（微信）和 Telegram 推送
 - **多层架构** — 规则预筛选 → AI 分析 → 买卖信号
 
+## 截图预览
+
+### 仪表盘 — 今日推荐
+
+![仪表盘](assets/dashboard.png)
+
+### 个股详情 — K 线与多 Agent 分析
+
+![个股详情](assets/stock-detail.png)
+
 ## 环境要求
 
 - Python 3.10+
