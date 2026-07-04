@@ -23,7 +23,7 @@ An AI-powered A-share stock research assistant. Automatically filters, analyzes,
 ### 1. Backend
 
 ```bash
-cd backend
+cd ai-stock-assistant/backend
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env and set your OPENAI_API_KEY and other config
@@ -35,14 +35,14 @@ The API will be available at `http://localhost:8000`.
 ### 2. Frontend
 
 ```bash
-cd frontend
+cd ai-stock-assistant/frontend
 npm install
 npm run dev
 ```
 
 The dashboard will be available at `http://localhost:3000`.
 
-## Configuration (`backend/.env`)
+## Configuration (`ai-stock-assistant/backend/.env`)
 
 | Variable | Default | Description |
 |---|---|---|
@@ -56,7 +56,7 @@ The dashboard will be available at `http://localhost:3000`.
 | `API_HOST` | `0.0.0.0` | Backend bind address |
 | `API_PORT` | `8000` | Backend port |
 
-Full reference in `backend/.env.example`.
+Full reference in `ai-stock-assistant/backend/.env.example`.
 
 ## Project Structure
 

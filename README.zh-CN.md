@@ -23,7 +23,7 @@
 ### 1. 启动后端
 
 ```bash
-cd backend
+cd ai-stock-assistant/backend
 pip install -r requirements.txt
 cp .env.example .env
 # 编辑 .env，填入 OPENAI_API_KEY 等配置
@@ -35,14 +35,14 @@ API 地址：`http://localhost:8000`
 ### 2. 启动前端
 
 ```bash
-cd frontend
+cd ai-stock-assistant/frontend
 npm install
 npm run dev
 ```
 
 仪表盘地址：`http://localhost:3000`
 
-## 配置说明 (`backend/.env`)
+## 配置说明 (`ai-stock-assistant/backend/.env`)
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
@@ -56,7 +56,7 @@ npm run dev
 | `API_HOST` | `0.0.0.0` | 后端监听地址 |
 | `API_PORT` | `8000` | 后端端口 |
 
-完整参考见 `backend/.env.example`。
+完整参考见 `ai-stock-assistant/backend/.env.example`。
 
 ## 项目结构
 
