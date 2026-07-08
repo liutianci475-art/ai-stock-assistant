@@ -124,6 +124,7 @@ export interface HoldingItem {
   ai_score_at_buy: number;
   buy_reason: string;
   status: string;
+  sell_price: number;
   pnl_pct: number | null;
   pnl_amount: number | null;
   market_value: number | null;
@@ -154,6 +155,13 @@ export interface HoldingCreateRequest {
 export interface HoldingUpdateRequest {
   stop_loss?: number;
   take_profit?: number;
+  buy_price?: number;
+}
+
+export interface AddPositionRequest {
+  add_price: number;
+  add_quantity: number;
+  add_reason?: string;
 }
 
 export interface TradeRecord {
@@ -224,7 +232,6 @@ export interface HoldingAdvice {
   action: string;
   severity: string;
   reason: string;
-  suggested_hold_days: number;
   days_held: number;
   pnl_pct: number;
   llm_analyzed: boolean;
@@ -261,6 +268,42 @@ export function updateHolding(holdingId: number, data: HoldingUpdateRequest): Pr
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+  });
+}
+
+export function addPosition(holdingId: number, data: AddPositionRequest): Promise<HoldingItem> {
+  return fetchJson<HoldingItem>(`${API_BASE}/portfolio/${holdingId}/add-position`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function createSellOrder(holdingId: number, sellPrice: number): Promise<HoldingItem> {
+  return fetchJson<HoldingItem>(`${API_BASE}/portfolio/${holdingId}/sell-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sell_price: sellPrice }),
+  });
+}
+
+export function updateSellOrderPrice(holdingId: number, sellPrice: number): Promise<HoldingItem> {
+  return fetchJson<HoldingItem>(`${API_BASE}/portfolio/${holdingId}/sell-order`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sell_price: sellPrice }),
+  });
+}
+
+export function confirmSell(holdingId: number, reason = "挂单成交"): Promise<HoldingItem> {
+  return fetchJson<HoldingItem>(`${API_BASE}/portfolio/${holdingId}/confirm-sell?reason=${encodeURIComponent(reason)}`, {
+    method: "POST",
+  });
+}
+
+export function cancelSellOrder(holdingId: number): Promise<HoldingItem> {
+  return fetchJson<HoldingItem>(`${API_BASE}/portfolio/${holdingId}/cancel-sell`, {
+    method: "POST",
   });
 }
 
@@ -339,6 +382,10 @@ export interface IndicatorsHistoryResponse {
   code: string;
   days: number;
   records: IndicatorRecord[];
+}
+
+export function fetchRealtimePrice(code: string): Promise<{ code: string; price: number }> {
+  return fetchJson<{ code: string; price: number }>(`${API_BASE}/stocks/realtime/${code}`);
 }
 
 export function fetchIndicatorsHistory(code: string, days = 120): Promise<IndicatorsHistoryResponse> {

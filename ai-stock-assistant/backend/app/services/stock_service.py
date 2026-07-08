@@ -16,8 +16,10 @@ STOCK_NAMES = {
 }
 
 _kline_cache = TTLCache(default_ttl=300)
+_realtime_cache = TTLCache(default_ttl=10)
 
 _TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+_TENCENT_QT_URL = "https://qt.gtimg.cn/q="
 _TENCENT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 }
@@ -84,6 +86,29 @@ def get_kline(code: str, days: int = 60, end_date: Optional[datetime] = None) ->
                 time.sleep(1.5 * (attempt + 1))
 
     raise last_error or RuntimeError(f"获取股票 {code} K 线失败")
+
+
+def get_realtime_price(code: str) -> float:
+    """获取股票实时价格。"""
+    cache_key = f"realtime:{code}"
+    cached = _realtime_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    market = _tencent_market(code)
+    url = f"{_TENCENT_QT_URL}{market}{code}"
+    resp = requests.get(url, timeout=10, headers=_TENCENT_HEADERS)
+    resp.raise_for_status()
+    text = resp.text.strip()
+    start = text.find('"')
+    end = text.rfind('"')
+    if start == -1 or end == -1:
+        raise ValueError(f"无法解析股票 {code} 实时行情")
+    parts = text[start + 1:end].split("~")
+    if len(parts) < 4:
+        raise ValueError(f"股票 {code} 实时行情数据格式异常")
+    price = float(parts[3])
+    _realtime_cache.set(cache_key, price)
+    return price
 
 
 def get_stock_snapshot(code: str, days: int = 60) -> StockSnapshot:

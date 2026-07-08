@@ -50,7 +50,7 @@ export default function KpiCards({ report }: { report: RecommendationReport }) {
     },
     {
       label: "交易胜率",
-      value: winRate !== null ? `${(winRate * 100).toFixed(0)}%` : "--",
+      value: winRate !== null ? `${winRate.toFixed(1)}%` : "--",
       color: "#8B5CF6",
       bg: "bg-purple-50",
       textColor: "text-purple-600",

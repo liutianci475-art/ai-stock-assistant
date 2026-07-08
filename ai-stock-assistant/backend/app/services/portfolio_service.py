@@ -7,12 +7,14 @@ from typing import List, Optional
 
 from app.db import get_connection, init_db
 from app.schemas.portfolio import (
+    AddPositionRequest,
     DailyReviewResult,
     HoldingCreate,
     HoldingItem,
     HoldingListResponse,
     HoldingUpdate,
     MonthlyPnL,
+    SellOrderRequest,
     TradeRecord,
 )
 
@@ -47,6 +49,38 @@ def create_holding(data: HoldingCreate) -> HoldingItem:
         )
         conn.commit()
         return get_holding_by_id(cursor.lastrowid)
+    finally:
+        conn.close()
+
+
+def add_position(holding_id: int, data: AddPositionRequest) -> HoldingItem:
+    """加仓：加权平均买入价，增加股数，记录买入交易。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM holdings WHERE id = ? AND status = 'holding'", (holding_id,)).fetchone()
+        if not row:
+            raise ValueError(f"持仓 {holding_id} 不存在或已平仓")
+
+        old_qty = row["quantity"]
+        old_price = row["buy_price"]
+        new_qty = data.add_quantity
+        new_price = data.add_price
+
+        total_qty = old_qty + new_qty
+        avg_price = round((old_price * old_qty + new_price * new_qty) / total_qty, 3)
+
+        conn.execute(
+            "UPDATE holdings SET buy_price = ?, quantity = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (avg_price, total_qty, holding_id),
+        )
+        conn.execute(
+            """INSERT INTO trades (holding_id, code, name, trade_date, trade_type,
+               price, quantity, reason)
+               VALUES (?, ?, ?, date('now', 'localtime'), 'buy', ?, ?, ?)""",
+            (holding_id, row["code"], row["name"], new_price, new_qty, data.add_reason),
+        )
+        conn.commit()
+        return get_holding_by_id(holding_id)
     finally:
         conn.close()
 
@@ -97,6 +131,9 @@ def update_holding(holding_id: int, data: HoldingUpdate) -> HoldingItem:
         if data.take_profit is not None:
             fields.append("take_profit = ?")
             values.append(data.take_profit)
+        if data.buy_price is not None:
+            fields.append("buy_price = ?")
+            values.append(data.buy_price)
         if not fields:
             return get_holding_by_id(holding_id)
         fields.append("updated_at = datetime('now', 'localtime')")
@@ -106,6 +143,13 @@ def update_holding(holding_id: int, data: HoldingUpdate) -> HoldingItem:
             values,
         )
         conn.commit()
+        # Also update the buy trade record price if buy_price changed
+        if data.buy_price is not None:
+            conn.execute(
+                "UPDATE trades SET price = ? WHERE holding_id = ? AND trade_type = 'buy'",
+                (data.buy_price, holding_id),
+            )
+            conn.commit()
         return get_holding_by_id(holding_id)
     finally:
         conn.close()
@@ -131,6 +175,85 @@ def sell_holding(holding_id: int, sell_price: Optional[float] = None, reason: st
                price, quantity, reason, pnl, pnl_pct)
                VALUES (?, ?, ?, date('now', 'localtime'), 'sell', ?, ?, ?, ?, ?)""",
             (holding_id, row["code"], row["name"], price, row["quantity"], reason, round(pnl, 2), round(pnl_pct, 2)),
+        )
+        conn.commit()
+        return get_holding_by_id(holding_id)
+    finally:
+        conn.close()
+
+
+def create_sell_order(holding_id: int, sell_price: float) -> HoldingItem:
+    """挂单：设置卖出挂单价，status→pending。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM holdings WHERE id = ? AND status = 'holding'", (holding_id,)).fetchone()
+        if not row:
+            raise ValueError(f"持仓 {holding_id} 不存在或已平仓")
+        conn.execute(
+            "UPDATE holdings SET status = 'pending', sell_price = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (sell_price, holding_id),
+        )
+        conn.commit()
+        return get_holding_by_id(holding_id)
+    finally:
+        conn.close()
+
+
+def update_sell_order_price(holding_id: int, sell_price: float) -> HoldingItem:
+    """改价：修改 pending 状态下的挂单价。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM holdings WHERE id = ? AND status = 'pending'", (holding_id,)).fetchone()
+        if not row:
+            raise ValueError(f"持仓 {holding_id} 不在挂单状态")
+        conn.execute(
+            "UPDATE holdings SET sell_price = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (sell_price, holding_id),
+        )
+        conn.commit()
+        return get_holding_by_id(holding_id)
+    finally:
+        conn.close()
+
+
+def confirm_sell(holding_id: int, reason: str = "挂单成交") -> HoldingItem:
+    """确认成交：status→sold，创建卖出交易记录。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM holdings WHERE id = ? AND status = 'pending'", (holding_id,)).fetchone()
+        if not row:
+            raise ValueError(f"持仓 {holding_id} 不在挂单状态")
+
+        price = row["sell_price"] if row["sell_price"] > 0 else row["current_price"]
+        pnl = (price - row["buy_price"]) * row["quantity"]
+        pnl_pct = (price - row["buy_price"]) / row["buy_price"] * 100
+
+        conn.execute(
+            "UPDATE holdings SET status = 'sold', current_price = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (price, holding_id),
+        )
+        conn.execute(
+            """INSERT INTO trades (holding_id, code, name, trade_date, trade_type,
+               price, quantity, reason, pnl, pnl_pct)
+               VALUES (?, ?, ?, date('now', 'localtime'), 'sell', ?, ?, ?, ?, ?)""",
+            (holding_id, row["code"], row["name"], price, row["quantity"], reason, round(pnl, 2), round(pnl_pct, 2)),
+        )
+        conn.commit()
+        return get_holding_by_id(holding_id)
+    finally:
+        conn.close()
+
+
+def cancel_sell_order(holding_id: int) -> HoldingItem:
+    """取消挂单：status→holding，清空 sell_price。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM holdings WHERE id = ? AND status = 'pending'", (holding_id,)).fetchone()
+        if not row:
+            raise ValueError(f"持仓 {holding_id} 不在挂单状态")
+        conn.execute(
+            "UPDATE holdings SET status = 'holding', sell_price = 0.0, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (holding_id,),
         )
         conn.commit()
         return get_holding_by_id(holding_id)
@@ -312,33 +435,54 @@ def get_holdings_advice() -> list[dict]:
         days = h.days_held or 0
         pnl = h.pnl_pct or 0
 
-        # 查询今日 LLM review
+        # 查询今日 LLM review（2 小时内有效）
         llm_action: Optional[str] = None
         llm_score: Optional[int] = None
         llm_reason: Optional[str] = None
+        HOLDING_ACTION_MAP = {
+            "买入": "考虑加仓",
+            "观望": "继续持有",
+            "卖出": "建议卖出",
+            "持有": "继续持有",
+            "加仓": "考虑加仓",
+            "减仓": "建议减仓",
+        }
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT action, score, reason FROM daily_reviews WHERE holding_id = ? AND review_date = ?",
+                "SELECT action, score, reason, created_at FROM daily_reviews WHERE holding_id = ? AND review_date = ? ORDER BY created_at DESC LIMIT 1",
                 (h.id, today),
             ).fetchone()
             if row:
-                llm_action = row["action"]
-                llm_score = row["score"]
-                llm_reason = row["reason"]
+                last_time = row["created_at"]
+                if last_time:
+                    elapsed = (datetime.now() - datetime.fromisoformat(last_time)).total_seconds()
+                    if elapsed < 7200:  # 2 小时内有效
+                        llm_action = HOLDING_ACTION_MAP.get(row["action"], row["action"])
+                        llm_score = row["score"]
+                        llm_reason = row["reason"]
         finally:
             conn.close()
 
-        # 3. 如果没有今日 LLM 分析，运行
+        # 3. 如果没有有效的今日 LLM 分析，运行
         if not llm_action:
             try:
                 indicators = get_indicator_snapshot(h.code, days=80, name=h.name)
                 if indicators:
-                    from app.services.ai_service import analyze_stock as ai_analyze
+                    from app.services.ai_service import analyze_holding
                     news_bundle = get_stock_news_bundle(h.code, h.name)
                     news_summary = build_news_summary(news_bundle)
-                    result = ai_analyze(indicators, news_summary=news_summary)
-                    llm_action = result.action
+                    result = analyze_holding(
+                        indicators,
+                        news_summary=news_summary,
+                        buy_price=h.buy_price,
+                        current_price=h.current_price,
+                        pnl_pct=pnl,
+                        holding_days=days,
+                        stop_loss=h.stop_loss or 0,
+                        take_profit=h.take_profit or 0,
+                    )
+                    llm_action = HOLDING_ACTION_MAP.get(result.action, result.action)
                     llm_score = result.score
                     llm_reason = result.reason[:200]
 
@@ -363,53 +507,43 @@ def get_holdings_advice() -> list[dict]:
             rule_action = llm_action
             rule_severity = "default"
             rule_reason = llm_reason or ""
-            rule_hold = days
         else:
             if h.stop_loss > 0 and h.current_price <= h.stop_loss:
                 rule_action = "建议止损"
                 rule_severity = "danger"
                 rule_reason = f"当前价 ¥{h.current_price:.2f} 已触及止损线 ¥{h.stop_loss:.2f}"
-                rule_hold = days
             elif h.take_profit > 0 and h.current_price >= h.take_profit:
                 rule_action = "考虑止盈"
                 rule_severity = "success"
                 rule_reason = f"当前价 ¥{h.current_price:.2f} 已达止盈目标 ¥{h.take_profit:.2f}"
-                rule_hold = days
             elif pnl < -15:
                 rule_action = "建议止损"
                 rule_severity = "danger"
                 rule_reason = f"亏损 {pnl:.1f}%，超过 15% 止损线"
-                rule_hold = days
             elif pnl < -5:
                 rule_action = "注意风险"
                 rule_severity = "warning"
                 rule_reason = f"浮亏 {pnl:.1f}%，建议密切关注，可考虑设置止损"
-                rule_hold = max(days, 10)
             elif pnl > 25:
                 rule_action = "考虑止盈"
                 rule_severity = "success"
                 rule_reason = f"盈利 {pnl:.1f}%，超过 25% 收益目标"
-                rule_hold = days
             elif pnl > 15:
                 rule_action = "考虑止盈"
                 rule_severity = "info"
                 rule_reason = f"盈利 {pnl:.1f}%，建议分批止盈锁定利润"
-                rule_hold = days
             elif days > 60:
                 rule_action = "建议评估"
                 rule_severity = "info"
                 rule_reason = f"已持有 {days} 天，建议重新评估是否继续持有"
-                rule_hold = days
             elif days > 30:
                 rule_action = "继续持有"
                 rule_severity = "default"
                 rule_reason = f"已持有 {days} 天，收益 {pnl:+.1f}%，建议按计划持有"
-                rule_hold = max(days, 45)
             else:
                 rule_action = "继续持有"
                 rule_severity = "default"
                 rule_reason = f"收益 {pnl:+.1f}%，建议继续持有观察"
-                rule_hold = 30
 
         advice_list.append({
             "holding_id": h.id,
@@ -418,7 +552,6 @@ def get_holdings_advice() -> list[dict]:
             "action": rule_action,
             "severity": rule_severity,
             "reason": rule_reason,
-            "suggested_hold_days": rule_hold,
             "days_held": days,
             "pnl_pct": round(pnl, 2),
             "llm_analyzed": llm_action is not None,
@@ -455,6 +588,7 @@ def _row_to_holding(row) -> HoldingItem:
         ai_score_at_buy=d["ai_score_at_buy"],
         buy_reason=d["buy_reason"],
         status=d["status"],
+        sell_price=d.get("sell_price", 0.0),
         pnl_pct=round(pnl_pct, 2),
         pnl_amount=round(pnl_amount, 2),
         market_value=round(mv, 2),

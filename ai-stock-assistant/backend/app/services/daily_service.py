@@ -55,15 +55,20 @@ def run_daily_routine() -> DailyRoutineResponse:
             # Build a basic analysis
             indicators = get_indicator_snapshot(holding.code, days=80, name=holding.name)
             if indicators:
-                # Build a simplified version for portfolio review
-                from app.services.ai_service import analyze_stock as ai_analyze
+                from app.services.ai_service import analyze_holding
                 news_bundle = get_stock_news_bundle(holding.code, holding.name)
                 news_summary = build_news_summary(news_bundle)
+                pnl_pct_val = round((latest_price - holding.buy_price) / holding.buy_price * 100, 2)
 
-                result = ai_analyze(
+                result = analyze_holding(
                     indicators,
                     news_summary=news_summary,
-                    use_batch_prompt=True,
+                    buy_price=holding.buy_price,
+                    current_price=latest_price,
+                    pnl_pct=pnl_pct_val,
+                    holding_days=holding.days_held or 0,
+                    stop_loss=holding.stop_loss or 0,
+                    take_profit=holding.take_profit or 0,
                 )
 
                 # Record daily review
@@ -74,8 +79,7 @@ def run_daily_routine() -> DailyRoutineResponse:
                            score, stars, reason, current_price, pnl_pct, token_usage)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (holding.id, holding.code, today, result.action, result.score,
-                         result.stars, result.reason, latest_price,
-                         (latest_price - holding.buy_price) / holding.buy_price * 100,
+                         result.stars, result.reason, latest_price, pnl_pct_val,
                          json.dumps(result.token_usage.model_dump() if result.token_usage else {})),
                     )
                     conn.commit()
@@ -99,7 +103,7 @@ def run_daily_routine() -> DailyRoutineResponse:
                     stars=result.stars,
                     reason=result.reason[:100],
                     current_price=latest_price,
-                    pnl_pct=round((latest_price - holding.buy_price) / holding.buy_price * 100, 2),
+                    pnl_pct=pnl_pct_val,
                 ))
         except Exception:
             continue
@@ -117,6 +121,31 @@ def run_daily_routine() -> DailyRoutineResponse:
     except Exception:
         new_candidates = 0
         new_recommendations = 0
+
+    # Step 2.5: Persist today's recommendations to DB
+    if new_recommendations > 0:
+        try:
+            conn = get_connection()
+            conn.execute("DELETE FROM recommendation WHERE recommend_date = ?", (today,))
+            for item in report.recommendations:
+                agent_json = json.dumps([a.model_dump() for a in item.agent_details], ensure_ascii=False)
+                tu = item.token_usage or TokenUsage()
+                conn.execute(
+                    """INSERT INTO recommendation
+                       (recommend_date, code, name, rank, score, stars, action, reason,
+                        rule_score, news_count, close_price, target_price, stop_loss_price,
+                        agent_details_json, prompt_tokens, completion_tokens, total_tokens, cost_rmb)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (today, item.code, item.name, item.rank, item.score, item.stars,
+                     item.action, item.reason, item.rule_score, item.news_count,
+                     item.close_price, item.target_price, item.stop_loss_price,
+                     agent_json, tu.prompt_tokens, tu.completion_tokens, tu.total_tokens, tu.cost_rmb),
+                )
+            conn.commit()
+        except Exception:
+            pass
+        finally:
+            conn.close()
 
     total_token_usage["cost_rmb"] = round(total_token_usage["cost_rmb"], 6)
 

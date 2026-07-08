@@ -11,7 +11,7 @@ from app.services.daily_service import run_daily_routine
 def is_trading_day(today: date) -> bool:
     try:
         df = ak.tool_trade_date_hist_sina()
-        return today.isoformat() in df["trade_date"].values
+        return today in set(df["trade_date"].values)
     except Exception:
         return today.weekday() < 5  # 出错时退回到仅判断周末
 

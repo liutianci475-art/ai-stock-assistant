@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.stock import IndicatorSnapshot
 from app.services.indicator_service import get_indicator_snapshot
-from app.services.stock_service import get_kline
+from app.services.stock_service import get_kline, get_realtime_price
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
 
@@ -25,6 +25,15 @@ def _load_stock_list() -> list[dict]:
     with open(_STOCK_CACHE_PATH, "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False)
     return records
+
+
+@router.get("/realtime/{code}")
+async def get_stock_realtime(code: str):
+    try:
+        price = get_realtime_price(code)
+        return {"code": code, "price": price}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/search")
@@ -57,7 +66,7 @@ async def get_stock_kline(code: str, days: int = 60):
                 r["日期"] = r["日期"].strftime("%Y-%m-%d")
             for k in list(r.keys()):
                 if isinstance(r[k], float):
-                    r[k] = round(r[k], 2)
+                    r[k] = round(r[k], 3)
         return {"code": code, "days": len(records), "klines": records}
     except HTTPException:
         raise

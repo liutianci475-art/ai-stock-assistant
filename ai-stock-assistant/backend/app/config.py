@@ -17,6 +17,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
 # LLM 计费（人民币 / 每百万 token），可在 .env 中按实际服务商调整
 LLM_INPUT_PRICE_PER_1M = float(os.getenv("LLM_INPUT_PRICE_PER_1M", "1.0"))
+LLM_INPUT_CACHE_HIT_PRICE_PER_1M = float(os.getenv("LLM_INPUT_CACHE_HIT_PRICE_PER_1M", "0.02"))
 LLM_OUTPUT_PRICE_PER_1M = float(os.getenv("LLM_OUTPUT_PRICE_PER_1M", "2.0"))
 
 # 低价股筛选：小本金入门默认开启，后期可在 .env 或前端切换

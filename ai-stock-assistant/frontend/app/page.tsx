@@ -22,15 +22,15 @@ export default function Home() {
   const [page, setPage] = useState<PageView>("home");
   const [report, setReport] = useState<RecommendationReport | null>(null);
   const [filterSettings, setFilterSettings] = useState<FilterSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [detailStock, setDetailStock] = useState<RecommendationItem | null>(null);
   const [boughtMap, setBoughtMap] = useState<Record<string, number>>({});
   const undoRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const handleBuy = useCallback(async (code: string, name: string, price: number) => {
+  const handleBuy = useCallback(async (code: string, name: string, price: number, quantity = 100) => {
     try {
-      const holding = await createHolding({ code, name, buy_price: price, quantity: 100 });
+      const holding = await createHolding({ code, name, buy_price: price, quantity });
       setBoughtMap((prev) => ({ ...prev, [code]: holding.id }));
       undoRefs.current[code] = setTimeout(() => {
         setBoughtMap((prev) => { const next = { ...prev }; delete next[code]; return next; });
@@ -71,8 +71,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    Promise.all([
+      fetchRecommendations(10, 5),
+      fetchFilterSettings(),
+    ]).then(([r, f]) => {
+      setReport(r);
+      setFilterSettings(f);
+    }).catch(() => {});
+  }, []);
 
   const handleSearchStock = useCallback((code: string, name: string) => {
     // Create a minimal RecommendationItem; StockDetail will fetch fresh analysis
@@ -180,10 +186,23 @@ export default function Home() {
               )}
 
               {/* Loading state */}
-              {loading && !report && (
+              {loading && !report?.count && (
                 <div className="flex flex-col items-center justify-center py-32">
                   <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-blue-100 border-t-blue-500" />
-                  <p className="mt-4 text-sm text-slate-500">正在加载数据...</p>
+                  <p className="mt-4 text-sm text-slate-500">正在分析，请稍候...</p>
+                </div>
+              )}
+
+              {/* Empty state: no cached results, prompt user */}
+              {!loading && report?.count === 0 && (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
+                    <svg className="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m-1-3l1 3m8.5-3l1 3m-1-3l-1 3m-5.25 0h-.008v.008h.008v-.008z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-bold text-[#111827]">AI 智能选股</h2>
+                  <p className="mt-1 text-sm text-[#6B7280]">今日暂无推荐。在顶栏设置价格范围后，点击「重新推荐」开始分析</p>
                 </div>
               )}
 

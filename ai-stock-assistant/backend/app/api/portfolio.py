@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.portfolio import (
+    AddPositionRequest,
     DailyRoutineResponse,
     HoldingAdvice,
     HoldingCreate,
@@ -10,12 +11,17 @@ from app.schemas.portfolio import (
     HoldingListResponse,
     HoldingsAdviceResponse,
     HoldingUpdate,
+    SellOrderRequest,
     TradeListResponse,
     TradeStats,
 )
 from app.services.daily_service import run_daily_routine
 from app.services.portfolio_service import (
+    add_position,
+    cancel_sell_order,
+    confirm_sell,
     create_holding,
+    create_sell_order,
     delete_holding,
     get_holdings_advice,
     get_trade_stats,
@@ -23,6 +29,7 @@ from app.services.portfolio_service import (
     list_trades,
     sell_holding,
     update_holding,
+    update_sell_order_price,
 )
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -49,6 +56,16 @@ async def api_holdings_advice():
     try:
         items = get_holdings_advice()
         return HoldingsAdviceResponse(items=[HoldingAdvice(**i) for i in items])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{holding_id}/add-position", response_model=HoldingItem)
+async def api_add_position(holding_id: int, data: AddPositionRequest):
+    try:
+        return add_position(holding_id, data)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -81,6 +98,46 @@ async def api_sell_holding(holding_id: int, sell_price: float = 0, reason: str =
         return sell_holding(holding_id, sell_price=price, reason=reason)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{holding_id}/sell-order", response_model=HoldingItem)
+async def api_create_sell_order(holding_id: int, data: SellOrderRequest):
+    try:
+        return create_sell_order(holding_id, data.sell_price)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/{holding_id}/sell-order", response_model=HoldingItem)
+async def api_update_sell_order(holding_id: int, data: SellOrderRequest):
+    try:
+        return update_sell_order_price(holding_id, data.sell_price)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{holding_id}/confirm-sell", response_model=HoldingItem)
+async def api_confirm_sell(holding_id: int, reason: str = "挂单成交"):
+    try:
+        return confirm_sell(holding_id, reason=reason)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{holding_id}/cancel-sell", response_model=HoldingItem)
+async def api_cancel_sell(holding_id: int):
+    try:
+        return cancel_sell_order(holding_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

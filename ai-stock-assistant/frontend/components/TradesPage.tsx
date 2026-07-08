@@ -143,7 +143,7 @@ export default function TradesPage() {
                         {{buy:"买入",sell:"卖出",add:"加仓",reduce:"减仓"}[t.trade_type] || t.trade_type}
                       </span>
                     </td>
-                    <td className="px-6 py-3.5 text-sm font-mono text-[#111827]">¥{t.price.toFixed(2)}</td>
+                    <td className="px-6 py-3.5 text-sm font-mono text-[#111827]">¥{t.price.toFixed(3)}</td>
                     <td className="px-6 py-3.5 text-sm font-mono text-[#6B7280]">{t.quantity}</td>
                     <td className="px-6 py-3.5">
                       {t.trade_type === "sell" ? (

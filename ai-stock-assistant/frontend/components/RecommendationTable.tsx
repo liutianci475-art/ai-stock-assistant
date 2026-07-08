@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState, Fragment, useEffect } from "react";
 import type { RecommendationReport, RecommendationItem, AgentDetail } from "@/lib/api";
+import { fetchRealtimePrice } from "@/lib/api";
 
 const ACTION_BADGE: Record<string, { label: string; class: string }> = {
   "买入": { label: "买入", class: "bg-blue-100 text-blue-700" },
@@ -61,16 +62,29 @@ export default function RecommendationTable({
   onRefresh: () => void;
   onSelectStock: (item: RecommendationItem) => void;
   boughtMap: Record<string, number>;
-  onBuy: (code: string, name: string, price: number) => void;
+  onBuy: (code: string, name: string, price: number, quantity?: number) => void;
   onUndo: (code: string) => void;
 }) {
   const [buyingCode, setBuyingCode] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [buyModal, setBuyModal] = useState<{ code: string; name: string; price: number; quantity: number; realtimePrice: number | null; loadingPrice: boolean } | null>(null);
 
-  const handleBuy = async (e: React.MouseEvent, code: string, name: string, price: number) => {
+  const openBuyModal = async (e: React.MouseEvent, code: string, name: string) => {
     e.stopPropagation();
-    setBuyingCode(code);
-    await onBuy(code, name, price);
+    setBuyModal({ code, name, price: 0, quantity: 100, realtimePrice: null, loadingPrice: true });
+    try {
+      const data = await fetchRealtimePrice(code);
+      setBuyModal((prev) => prev && { ...prev, realtimePrice: data.price, price: data.price, loadingPrice: false });
+    } catch {
+      setBuyModal((prev) => prev && { ...prev, loadingPrice: false });
+    }
+  };
+
+  const confirmBuy = async () => {
+    if (!buyModal || !buyModal.price) return;
+    setBuyingCode(buyModal.code);
+    setBuyModal(null);
+    await onBuy(buyModal.code, buyModal.name, buyModal.price, buyModal.quantity);
     setBuyingCode(null);
   };
 
@@ -111,7 +125,9 @@ export default function RecommendationTable({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-16 text-center text-sm text-[#6B7280]">暂无符合条件的推荐</td>
+                <td colSpan={7} className="px-6 py-16 text-center text-sm text-[#6B7280]">
+                  {report.candidate_count > 0 ? "暂无符合条件的推荐" : "请在顶栏设置价格范围后点击「重新推荐」"}
+                </td>
               </tr>
             ) : (
               items.map((item) => {
@@ -174,13 +190,13 @@ export default function RecommendationTable({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-emerald-600 font-semibold cursor-pointer" onClick={() => onSelectStock(item)}>
-                        ¥{item.target_price?.toFixed(2) ?? "--"}
+                        ¥{item.target_price?.toFixed(3) ?? "--"}
                       </td>
                       <td className="px-6 py-4 text-sm text-[#111827] font-bold cursor-pointer" onClick={() => onSelectStock(item)}>
-                        ¥{item.close_price.toFixed(2)}
+                        ¥{item.close_price.toFixed(3)}
                       </td>
                       <td className="px-6 py-4 text-sm text-red-500 cursor-pointer" onClick={() => onSelectStock(item)}>
-                        ¥{item.stop_loss_price?.toFixed(2) ?? "--"}
+                        ¥{item.stop_loss_price?.toFixed(3) ?? "--"}
                       </td>
                       <td className="px-6 py-4 text-center cursor-pointer" onClick={() => onSelectStock(item)}>
                         {boughtMap[item.code] ? (
@@ -192,7 +208,7 @@ export default function RecommendationTable({
                           </button>
                         ) : (
                           <button
-                            onClick={(e) => handleBuy(e, item.code, item.name, item.close_price)}
+                            onClick={(e) => openBuyModal(e, item.code, item.name)}
                             disabled={buyingCode === item.code}
                             className="rounded-lg bg-[#3B82F6] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                           >
@@ -227,6 +243,60 @@ export default function RecommendationTable({
           </tbody>
         </table>
       </div>
+
+      {/* Buy Modal */}
+      {buyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setBuyModal(null)}>
+          <div className="w-[360px] rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-[#111827]">买入确认</h3>
+            <div className="mt-1 text-sm text-[#6B7280]">{buyModal.name} ({buyModal.code})</div>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-[#6B7280]">实时价</label>
+                {buyModal.loadingPrice ? (
+                  <div className="mt-1 h-8 animate-pulse rounded-lg bg-[#F3F4F6]" />
+                ) : (
+                  <input
+                    type="number"
+                    step={0.01}
+                    value={buyModal.price}
+                    onChange={(e) => setBuyModal({ ...buyModal, price: parseFloat(e.target.value) || 0 })}
+                    className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-sm outline-none focus:border-[#3B82F6]"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#6B7280]">买入数量（股）</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={100}
+                  value={buyModal.quantity}
+                  onChange={(e) => setBuyModal({ ...buyModal, quantity: parseInt(e.target.value) || 0 })}
+                  className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-sm outline-none focus:border-[#3B82F6]"
+                />
+              </div>
+              {!buyModal.loadingPrice && buyModal.price > 0 && (
+                <div className="rounded-lg bg-[#F9FAFB] px-3 py-2 text-xs text-[#6B7280]">
+                  预计成本：¥{(buyModal.price * buyModal.quantity).toFixed(2)}
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setBuyModal(null)} className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-xs font-semibold text-[#6B7280] hover:bg-[#F9FAFB]">
+                取消
+              </button>
+              <button
+                onClick={confirmBuy}
+                disabled={!buyModal.price || buyModal.price <= 0 || buyModal.quantity <= 0}
+                className="rounded-lg bg-[#3B82F6] px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                确认买入
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between border-t border-[#E5E7EB] px-6 py-3">

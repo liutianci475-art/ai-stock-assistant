@@ -22,13 +22,10 @@ function ActionBadge({ severity, action }: { severity: string; action: string })
   );
 }
 
-function DaysTag({ days, suggested }: { days: number; suggested: number }) {
-  const overdue = days > suggested;
+function DaysTag({ days }: { days: number }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-mono font-medium ${
-      overdue ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
-    }`}>
-      <svg className={`h-3 w-3 ${overdue ? "text-red-400" : "text-blue-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-mono font-medium bg-blue-50 text-blue-600">
+      <svg className="h-3 w-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <circle cx="12" cy="12" r="10" />
         <path strokeLinecap="round" d="M12 6v6l4 2" />
       </svg>
@@ -129,7 +126,7 @@ export default function PortfolioPanel({
                         </span>
                       )}
                     </div>
-                    <DaysTag days={a.days_held} suggested={a.suggested_hold_days} />
+                    <DaysTag days={a.days_held} />
                   </div>
 
                   {/* Row 2: PnL + action badge */}
@@ -146,11 +143,12 @@ export default function PortfolioPanel({
                   <div className="border-t border-[#F3F4F6] bg-[#F8FAFC] px-5 py-3">
                     <div className="flex items-start gap-2">
                       <span className="mt-0.5 text-[11px] text-[#6B7280]">建议</span>
-                      <p className="text-xs leading-relaxed text-[#374151]">{a.reason}</p>
+                      <p className="text-xs leading-relaxed text-[#374151]">
+                        {a.reason}
+                      </p>
                     </div>
                     <div className="mt-2 flex gap-4 text-[10px] text-[#9CA3AF]">
                       <span>已持 {a.days_held} 天</span>
-                      <span>建议持有 {a.suggested_hold_days} 天</span>
                       {a.llm_analyzed && <span className="text-blue-500">AI 分析</span>}
                     </div>
                   </div>

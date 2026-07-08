@@ -16,6 +16,29 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+def _migrate_recommendation(conn: sqlite3.Connection) -> None:
+    for col, default in [
+        ("target_price", "0.0"),
+        ("stop_loss_price", "0.0"),
+        ("agent_details_json", "'[]'"),
+        ("prompt_tokens", "0"),
+        ("completion_tokens", "0"),
+        ("total_tokens", "0"),
+        ("cost_rmb", "0.0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE recommendation ADD COLUMN {col} TEXT DEFAULT {default}")
+        except sqlite3.OperationalError:
+            pass
+
+
+def _migrate_holdings(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("ALTER TABLE holdings ADD COLUMN sell_price REAL DEFAULT 0.0")
+    except sqlite3.OperationalError:
+        pass
+
+
 def init_db() -> None:
     conn = get_connection()
     try:
@@ -76,6 +99,7 @@ def init_db() -> None:
             ai_score_at_buy INTEGER DEFAULT 0,
             buy_reason TEXT DEFAULT '',
             status TEXT DEFAULT 'holding',
+            sell_price REAL DEFAULT 0.0,
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
@@ -112,6 +136,8 @@ def init_db() -> None:
             FOREIGN KEY (holding_id) REFERENCES holdings(id)
         );
         """)
+        _migrate_recommendation(conn)
+        _migrate_holdings(conn)
         conn.commit()
     finally:
         conn.close()

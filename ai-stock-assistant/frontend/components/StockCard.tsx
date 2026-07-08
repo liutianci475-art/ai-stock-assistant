@@ -104,7 +104,7 @@ export default function StockCard({ item }: { item: RecommendationItem }) {
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-lg font-mono font-bold tracking-tight text-slate-100">
-              ¥<span className="tabular-nums">{item.close_price.toFixed(2)}</span>
+              ¥<span className="tabular-nums">{item.close_price.toFixed(3)}</span>
             </span>
             {!item.passes_price_filter && (
               <span className="rounded border border-red-800/50 bg-red-900/30 px-1.5 py-0.5 text-[10px] font-medium text-red-400">

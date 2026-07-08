@@ -22,6 +22,17 @@ class HoldingCreate(BaseModel):
 class HoldingUpdate(BaseModel):
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    buy_price: Optional[float] = None
+
+
+class AddPositionRequest(BaseModel):
+    add_price: float
+    add_quantity: int
+    add_reason: str = "手动加仓"
+
+
+class SellOrderRequest(BaseModel):
+    sell_price: float
 
 
 class HoldingItem(BaseModel):
@@ -37,6 +48,7 @@ class HoldingItem(BaseModel):
     ai_score_at_buy: int
     buy_reason: str
     status: str
+    sell_price: float = 0.0
     pnl_pct: Optional[float] = None
     pnl_amount: Optional[float] = None
     market_value: Optional[float] = None
@@ -113,7 +125,6 @@ class HoldingAdvice(BaseModel):
     action: str  # 继续持有 / 注意风险 / 建议止损 / 考虑止盈 / 建议评估
     severity: str  # default / warning / danger / success / info
     reason: str
-    suggested_hold_days: int
     days_held: int
     pnl_pct: float
     llm_analyzed: bool = False

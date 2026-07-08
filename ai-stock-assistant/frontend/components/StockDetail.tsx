@@ -171,7 +171,7 @@ export default function StockDetail({ stock, onBack }: StockDetailProps) {
               <div className="mt-4 flex items-center gap-6">
                 <div>
                   <div className="text-xs font-medium text-[#6B7280]">当前价格</div>
-                  <div className="mt-0.5 text-xl font-bold text-[#111827]">¥{data.close_price.toFixed(2)}</div>
+                  <div className="mt-0.5 text-xl font-bold text-[#111827]">¥{data.close_price.toFixed(3)}</div>
                 </div>
                 <div>
                   <div className="text-xs font-medium text-[#6B7280]">AI 评分</div>
